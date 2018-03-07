@@ -1,0 +1,39 @@
+
+
+
+scene = set of visual locations with: screen-x, screen-y, width, and height
+prev-scene = set of visual locations with: screen-x, screen-y, width, and height
+r = a grouping radius
+
+point-collision(point1, point2, r):
+    1. if euclidian distance(point1,point2) < r, point1 and point2 have collided, return true
+
+box-collision(point1, point2, r):
+    1. target = the nearest coordinates to point1 on the perimeter of point2's bounding box
+    2. check point-collision(corner, target) for each corner of point1's bounding box
+    3. check whether target is within r of the top, bottom, left, or right of point1's bounding box
+    4. check whether target is overlapping with point1's bounding box (just in case!)
+    5. if any of the above is true, point1 and point2 have collided, return true
+
+grouping(scene):
+    1. find an unexamined point, a, in the scene
+    2. find another unexamined point, b, in the scene
+    3. if [point-collide or box-collide](a,b,r): add b to the group
+    4. grow the group by repeating steps 2 and 3 for each new point added until there are no more nearby points
+    5. assign all members of the group a new group-id
+    6. repeat steps 1-5 until all points in the scene have been examined, and all points now have an associated group-id
+
+overlap(group1, group2):
+    1. if any point in group1 collides with any point in group2, these groups overlap, return true
+
+inheritance(scene, prev-scene):
+    1. count the number of unique group-wise overlaps between all groups in scene and prev-scene 
+    2. a current group inherits a previous group's group-id only if both the current group and a previous group exclusively overlap with one another 
+    3. assign a new group-id if:
+        2a. the current group is new, i.e. it does not overlap with any previous groups
+        2b. the current group is the result of a merge, i.e. it overlaps with more than 1 previous group
+        2c. the current group is the result of a split, i.e. it overlaps with a previous group that also overlaps with at least one other current group
+    6. if a previous group overlaps with no current groups, that group is dead and its group-id will not propagate forward in time. 
+
+    
+    
