@@ -42,10 +42,10 @@
 ;;;             : - add some rudimentary form of hierarchy-- two or three layers of group
 ;;;             : - "subgroup", "group", "supergroup"
 ;;;             : - add support for N-back group inheritance
-;;;             :    - emoirical: how far back can group knowledge be retained before re-study?
+;;;             :    - empirical: how far back can group knowledge be retained before re-study?
 ;;; --- History ---
-;;; 2018.02.14   author [label]
-;;;             : wha happa
+;;; 2018.03.19  jkl [0.95]
+;;;             : added option to produce sequential group names for debugging
 ;;; 2018.02.14   author [0.9]
 ;;;             : First commit
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -70,6 +70,11 @@ comment out a block
 
 
 
+
+;parameters and options
+(defparameter vg-glomming-radius 25)
+(defparameter vg-collision-type 'box) ;box or point
+(defparameter vg-naming-type 'generic) ;generic or sequential
 
 
 
@@ -411,11 +416,21 @@ comment out a block
   (dolist (p (points vg)) (print p))
 )
 
-;generate a list of n (gensyms)
+;generate a list of n (new-names)
 (defun gen-n-syms (n)
-  (loop for i from 1 to n
-   append (list (gensym)) into gps
-   finally (return gps)
+  (case vg-naming-type
+    (sequential
+      (loop for i from 1 to n
+        append (list (new-name "group")) into gps
+        finally (return gps)
+      )
+    )
+    (generic
+      (loop for i from 1 to n
+        append (list (gensym)) into gps
+        finally (return gps)
+      )
+    )
   )
 )
 
@@ -507,7 +522,7 @@ comment out a block
         ;if found a name to inherit, add it to the list, otherwise generate a new one.
         (if inherited-name 
             (setf newnames (append newnames (list inherited-name)))
-            (setf newnames (append newnames (list (gensym))))
+            (setf newnames (append newnames (gen-n-syms 1)))
         )
       )
     )
@@ -529,17 +544,15 @@ comment out a block
 
 ;; ACT-R integration
 
-; Load ACT-R
+;after loading ACT-R...
 ;(load (merge-pathnames "../actr7/load-act-r.lisp" *load-truename*))
 
 
+;storage of scenes
 (defparameter vg-scene NIL)
 (defparameter vg-prev-scene NIL)
-(defparameter vg-grouping-radius 25)
-(defparameter vg-grouping-type 'box) ;box or point
 
 ;:around method for ACT-R to insert this grouping algorithm into the proc-display. 
-;(extend-possible-slots 'group)
 ;
 ; expects the above global parameters to function
 (defmethod build-vis-locs-for :around ((self window) (vis-mod vision-module))
@@ -550,7 +563,7 @@ comment out a block
     )
     
     ;store the previous scene and parse the current one
-    (setf vg-scene (make-instance 'visual-groups :visicon-fts feat-lst :glom-radius vg-grouping-radius :glom-type vg-grouping-type))
+    (setf vg-scene (make-instance 'visual-groups :visicon-fts feat-lst :glom-radius vg-glomming-radius :glom-type vg-collision-type))
 
     ;label the groups (and inherit if possible)
     (label-groups vg-scene vg-prev-scene)
@@ -572,8 +585,8 @@ comment out a block
   (awhen (get-module :vision)  ;; Test that there is a vision module
          (update-new it)
          (check-finsts it) 
-         (command-output "ID                  Group   Loc        Wd/Ht      Att  Kind           Color             Value           ")
-         (command-output "------------------  ------  ---------  ---------  ---  -------------  ----------------  -------------")
+         (command-output "ID                   Group     Loc          Wd / Ht      Att  Kind           Color             Value           ")
+         (command-output "-------------------  --------  -----------  -----------  ---  -------------  ----------------  -------------")
          
          (mapcar (lambda (x) (print-icon-feature x it)) (visicon-chunks it t))
          nil))
@@ -584,7 +597,7 @@ comment out a block
          (coord-slots (vis-loc-slots vis-mod))
          (x-slot (first coord-slots))
          (y-slot (second coord-slots)))
-    (command-output "~18A  ~6A  (~3D ~3D)  (~3D ~3D)  ~3A  ~13A  ~16A  ~32A"
+    (command-output "~19A  ~8A  (~4A ~4A)  (~4A ~4A)  ~3A  ~13A  ~16A  ~32A"
                     (chunk-visual-feature-name chunk)
                     (chunk-slot-value-fct chunk 'group)
                     (chunk-slot-value-fct chunk x-slot) 
@@ -604,7 +617,7 @@ comment out a block
 (format t 
 "Visual grouping system loaded. 
 Visicon entries now have an automatically assigned 'group' slot.
-Set the 'vg-grouping-radius' parameter to a new value (in pixels) to adjust the grouping method." )
+Set the 'vg-glomming-radius' parameter to a new value (in pixels) to adjust the grouping method." )
 
 
 

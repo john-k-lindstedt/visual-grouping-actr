@@ -1,7 +1,7 @@
 ;load ACT-R
 (load (merge-pathnames "../actr7/load-act-r.lisp" *load-truename*))
 
-;(load (merge-pathnames "./visual-grouping.lisp" *load-truename*))
+(load (merge-pathnames "./visual-grouping.lisp" *load-truename*))
 
 ;load our task environment
 (load (merge-pathnames "../VBEmulator/VBEmulator.lisp" *load-truename*))
@@ -12,9 +12,10 @@
 (load (merge-pathnames "../models/Retrieve-Serial-Recog-Party-6.lisp" *load-truename*))
 (install-device *vbw*)
 
-;set parameters
-(setf vg-grouping-radius 25)
-(setf vg-grouping-type 'box) ;'point is faster, but less plausible (also needs a larger radius to work similarly)
+;set parameters (do this in your model, too)
+(setf vg-glomming-radius 25)
+(setf vg-collision-type 'box) ;'point is faster, but less plausible (also needs a larger radius to work similarly)
+(setf vg-naming-type 'sequential) ;'generic is more appropriate, but harder to debug
 
 ;proc the display and check out the group values 
 (proc-display)
@@ -36,3 +37,4 @@
 (do-experiment)
 (proc-display)
 (print-visicon)
+
