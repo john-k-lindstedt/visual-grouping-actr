@@ -76,6 +76,48 @@ comment out a block
 (defparameter vg-collision-type 'box) ;box or point
 (defparameter vg-naming-type 'generic) ;generic or sequential
 
+(defparameter *show-visicon-boxes* T)
+(defparameter *show-visicon-boxes-filled* T)
+
+(defparameter *fill-focus-ring* T)
+
+(defparameter *group-color-hash* (make-hash-table))
+(defparameter *color-random-state* (make-random-state t))
+
+;visgroup boxes
+(defclass visicon-box (rpm-overlay)
+  (
+   (easygui::foreground :accessor color :initform *black-color*)
+  )
+  (:default-initargs 
+    :view-size #@( 20  20)
+  )
+)
+
+
+;drawing visgroup boxes
+(defmethod view-draw-contents ((self visicon-box))
+  (let ((oldmode (pen-mode self))
+        (oldpat (pen-pattern self))
+        (oldsize (pen-size self)))
+    (set-pen-mode self :pator)
+    (set-pen-pattern self *light-gray-pattern*)
+    (set-pen-size self 6 6)
+    (with-focused-view self
+      (with-fore-color (color self)
+        (if *show-visicon-boxes-filled*
+          (paint-rect self #@(0 0) (view-size self))
+          (frame-rect self #@(0 0) (view-size self))
+        )
+      )
+    )
+    (set-pen-mode self oldmode)
+    (set-pen-pattern self oldpat)
+    (set-pen-size self (point-h oldsize) (point-v oldsize))
+  )
+)
+
+
 
 
 ;; A fully bottom-up visual-grouping system for the ACT-R visicon
@@ -98,6 +140,7 @@ comment out a block
         (group-ix :initarg :group-ix :accessor group-ix  :initform NIL)
         (visloc   :initarg :visloc   :accessor visloc    :initform NIL)
         (coord    :initarg :coord    :accessor coord     :initform NIL)
+        (visicon-box                 :accessor visicon-box :initform NIL)
     )
 )
 
@@ -105,6 +148,14 @@ comment out a block
 (defmethod initialize-instance :after ((vg vispoint) &key)
   (if (visloc vg)
     NIL
+  )
+  (when *show-visicon-boxes* 
+    (setf (visicon-box vg) 
+      (make-instance 'visicon-box 
+                       :view-position #@( (- (screen-x vg) (/ (width vg) 2)) (- (screen-y vg) (/ (height vg) 2)) )
+                       :view-size #@( (width vg) (height vg) )
+      )
+    )
   )
 )
 
@@ -220,19 +271,25 @@ comment out a block
   )
 )
 
-
-
-
-
-
-
-
 ;add some slot info to the object print function
 (defmethod print-object ((pt vispoint) out)
   (print-unreadable-object (pt out :type t)
     (format out "~s" (list (id pt) (group-ix pt) (group-name pt) (screen-x pt) (screen-y pt)))
   )
 )
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -281,6 +338,11 @@ comment out a block
                      )) into pts
         finally (setf (points vg) pts)
   )
+)
+
+
+(defmethod get-visicon-boxes ((vg visual-groups))
+  (mapcar 'visicon-box (points vg))
 )
 
 ;build a set of vispoint objects from a set of coordinates
@@ -416,6 +478,47 @@ comment out a block
   (dolist (p (points vg)) (print p))
 )
 
+
+
+;from https://github.com/fukamachi/clozure-cl/blob/master/examples/cocoa/easygui/rgb.lisp
+(defun make-rgb (&key (red 0) (green 0) (blue 0) (opacity 1.0))
+  (assert (typep red     '(integer 0 255)) (red)
+          "Value of RED component for make-rgb must be an integer 0-255 inclusive")
+  (assert (typep green   '(integer 0 255)) (green)
+          "Value of GREEN component for make-rgb must be an integer 0-255 inclusive")
+  (assert (typep blue    '(integer 0 255)) (blue)
+          "Value of BLUE component for make-rgb must be an integer 0-255 inclusive")
+  (assert (typep opacity '(single-float 0.0 1.0)) (opacity)
+          "Value of OPACITY component for make-rgb must be a single-float 0.0-1.0 inclusive")
+  (#/retain
+   (#/colorWithCalibratedRed:green:blue:alpha:
+    ns:ns-color
+    (/ red 255.0)
+    (/ green 255.0)
+    (/ blue 255.0)
+    opacity)))
+
+
+(defun generate-color ()
+  (make-rgb 
+    :red   (+ 55 (random 200 *color-random-state*) )
+    :green (+ 55 (random 200 *color-random-state*) ) 
+    :blue  (+ 55 (random 200 *color-random-state*) )
+    :opacity .7
+  )
+)
+
+(defmethod apply-group-colors ((vg visual-groups))
+  (dolist (pt (points vg))
+    (unless (gethash (group-name pt) *group-color-hash*)
+      (setf (gethash (group-name pt) *group-color-hash*) (generate-color))
+    )
+    (setf (color (visicon-box pt)) (gethash (group-name pt) *group-color-hash*))
+  )
+)
+
+
+
 ;generate a list of n (new-names)
 (defun gen-n-syms (n)
   (case vg-naming-type
@@ -447,6 +550,7 @@ comment out a block
     )
     (inherit-group-labels vg prev-vg)
   )
+  (when *show-visicon-boxes* (apply-group-colors vg))
 )
 
 
@@ -542,6 +646,9 @@ comment out a block
 
 
 
+
+
+
 ;; ACT-R integration
 
 ;after loading ACT-R...
@@ -551,6 +658,8 @@ comment out a block
 ;storage of scenes
 (defparameter vg-scene NIL)
 (defparameter vg-prev-scene NIL)
+
+
 
 ;:around method for ACT-R to insert this grouping algorithm into the proc-display. 
 ;
@@ -568,13 +677,21 @@ comment out a block
     ;label the groups (and inherit if possible)
     (label-groups vg-scene vg-prev-scene)
 
-    ;
+    ;display boxes around the visicon content
+    (when *show-visicon-boxes* 
+      (when vg-prev-scene (apply #'remove-visual-items-from-rpm-window (flatten (list self (get-visicon-boxes vg-prev-scene)))))
+      (apply #'add-visual-items-to-rpm-window (flatten (list self (get-visicon-boxes vg-scene))))
+    )
+
+    ;now that the groups have been determined, store the current scene in the previous scene
     (setf vg-prev-scene vg-scene)
 
     ;retrieve the group name for each point
     (dolist (feat feat-lst)
       (set-chunk-slot-value-fct feat 'group (get-group vg-scene feat))
     )
+
+
     feat-lst
   )
 )
@@ -610,6 +727,37 @@ comment out a block
                     (if (null (chunk-real-visual-value chunk))
                         (chunk-slot-value-fct chunk 'value) 
                       (chunk-real-visual-value chunk)))))
+
+
+
+;adjust pen size for focus ring
+
+(when *fill-focus-ring* T
+  (defmethod view-draw-contents ((self focus-ring))
+    (let 
+      (
+        (oldmode (pen-mode self))
+        (oldpat (pen-pattern self))
+        (oldsize (pen-size self))
+      )
+      (set-pen-mode self :pator)
+      (set-pen-pattern self *light-gray-pattern*)
+      (set-pen-size self 4 4)
+      (with-focused-view self
+        (with-fore-color (color self)
+          (paint-oval self #@(0 0) (view-size self))))
+      (set-pen-mode self oldmode)
+      (set-pen-pattern self oldpat)
+      (set-pen-size self (point-h oldsize) (point-v oldsize))
+    )
+  )
+)
+
+
+
+
+
+
 
 
 
